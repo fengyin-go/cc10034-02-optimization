@@ -12,6 +12,17 @@
         <button class="btn" data-testid="export" type="button" @click="exportRows">
           导出{{ meta.name }}清单
         </button>
+        <RouterLink
+          v-if="meta.key === 'event_filter'"
+          class="btn"
+          data-testid="open-filter-batches"
+          to="/event_filter/batches"
+        >
+          过滤批次与结果集
+        </RouterLink>
+        <button v-if="meta.key === 'change_event'" class="btn" data-testid="receive-batch" type="button" @click="receiveFilterBatch">
+          提交过滤批次
+        </button>
       </div>
     </header>
 
@@ -88,6 +99,7 @@
 
     <footer class="page-foot">
       <span>共 {{ total }} 条{{ meta.name }}记录</span>
+      <span v-if="noticeMessage" class="notice-text" data-testid="notice">{{ noticeMessage }}</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
   </section>
@@ -95,12 +107,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 
 import {
   createEntry,
   downloadEntries,
   listEntries,
   moduleMeta,
+  receiveFilterBatch as submitFilterBatch,
   runAction as applyAction,
 } from '@/api/backend-service'
 import type { EntryRow } from '@/data/types'
@@ -110,6 +124,7 @@ const meta = moduleMeta(props.moduleKey)
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
+const noticeMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = meta.fields.slice(0, 3)
 const showCreate = ref(false)
@@ -173,6 +188,18 @@ async function runAction(action: string, row: EntryRow) {
     await reload()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '操作失败'
+  }
+}
+
+async function receiveFilterBatch() {
+  errorMessage.value = ''
+  try {
+    const payload = await submitFilterBatch(rows.value)
+    noticeMessage.value = payload.replayed
+      ? `批次 ${payload.batch_id} 重复提交，沿用首次处置（规则版本 ${payload.rule_version.version_id}）`
+      : `批次 ${payload.batch_id} 已接收：放行 ${payload.summary.allowed_count} / 拦截 ${payload.summary.blocked_count}`
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '批次接收失败'
   }
 }
 
